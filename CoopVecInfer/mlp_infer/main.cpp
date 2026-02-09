@@ -7,6 +7,8 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include "DeviceUtils.h"
+#include "GraphicsResources.h"
 
 using namespace donut;
 
@@ -238,19 +240,42 @@ int main(int __argc, const char** __argv)
 #endif
 {
     nvrhi::GraphicsAPI api = app::GetGraphicsAPIFromCommandLine(__argc, __argv);
+    if (api == nvrhi::GraphicsAPI::D3D11)
+    {
+        log::error("This sample does not support D3D11");
+        return 1;
+    }
+
     app::DeviceManager* deviceManager = app::DeviceManager::Create(api);
 
     app::DeviceCreationParameters deviceParams;
 #ifdef _DEBUG
     deviceParams.enableDebugRuntime = true;
+    deviceParams.enableGPUValidation = false;
     deviceParams.enableNvrhiValidationLayer = true;
 #endif
+
+    SetCoopVectorExtensionParameters(deviceParams, api, true, g_WindowTitle);
 
     deviceParams.backBufferWidth = 600;
     deviceParams.backBufferHeight = 600;
     if (!deviceManager->CreateWindowDeviceAndSwapChain(deviceParams, g_WindowTitle))
     {
-        log::fatal("Cannot initialize a graphics device with the requested parameters");
+        if (api == nvrhi::GraphicsAPI::VULKAN)
+        {
+            log::fatal("Cannot initialize a graphics device with the requested parameters. Please try a NVIDIA driver version greater than 570");
+        }
+        if (api == nvrhi::GraphicsAPI::D3D12)
+        {
+            log::fatal("Cannot initialize a graphics device with the requested parameters. Please use the Shader Model 6-9-Preview Driver, link in the README");
+        }
+        return 1;
+    }
+
+    auto graphicsResources = std::make_unique<GraphicsResources>(deviceManager->GetDevice());
+    if (!graphicsResources->GetCoopVectorFeatures().inferenceSupported && !graphicsResources->GetCoopVectorFeatures().fp16InferencingSupported)
+    {
+        log::fatal("Not all required Coop Vector features are available");
         return 1;
     }
 
