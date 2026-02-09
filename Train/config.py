@@ -35,7 +35,7 @@ class Config:
         # ===================== Training Settings =====================
         self.batch_size = 512                 # Batch size
         self.lr = 1e-3                        # Learning rate
-        self.epochs = 100                     # Number of training epochs
+        self.epochs = 200                     # Number of training epochs
         # Device configuration (GPU/CPU)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
