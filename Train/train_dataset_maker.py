@@ -3,6 +3,7 @@ import json
 import struct
 from pathlib import Path
 import numpy as np
+from scipy.ndimage import map_coordinates
 import exr_util
 
 def decode_r11g11b10f(b0, b1, b2, b3):
@@ -42,6 +43,50 @@ def decode_r11g11b10f(b0, b1, b2, b3):
     b_val = decode_float(b_bits, 5)
     
     return r_val, g_val, b_val
+
+def generate_random_samples(volume, num_samples, scale_factor=1.0):
+    """
+    基于 3D volume 生成随机连续坐标，并进行三线性插值采样。
+    用于让 SIREN 学习体素间的平滑过渡。
+    
+    Args:
+        volume: shape (D, H, W, 3) 的 float32 数组
+        num_samples: 生成的随机点数量
+        scale_factor: 颜色缩放因子
+    Returns:
+        samples: shape (num_samples, 6) 的数组，包含 [x, y, z, r, g, b]
+    """
+    print(f"Generating {num_samples} random interpolated samples...")
+    D, H, W, C = volume.shape
+
+    # 1. 生成随机浮点坐标 (对应 Z, Y, X 轴的索引范围)
+    # 范围: [0, D-1], [0, H-1], [0, W-1]
+    rand_z = np.random.rand(num_samples) * (D - 1)
+    rand_y = np.random.rand(num_samples) * (H - 1)
+    rand_x = np.random.rand(num_samples) * (W - 1)
+
+    # 2. 准备插值坐标 (3, N) -> map_coordinates 需要 (Dim0, Dim1, Dim2) 顺序
+    coords = np.stack([rand_z, rand_y, rand_x])
+
+    # 3. 三线性插值 (Order=1)，边缘截断 (Mode='nearest' 对应 UE Clamp)
+    # 分别对 R, G, B 通道采样
+    r_vals = map_coordinates(volume[..., 0], coords, order=1, mode='nearest')
+    g_vals = map_coordinates(volume[..., 1], coords, order=1, mode='nearest')
+    b_vals = map_coordinates(volume[..., 2], coords, order=1, mode='nearest')
+
+    # 4. 归一化坐标到 0~1 (作为神经网络输入)
+    # 注意输出顺序是: x, y, z, r, g, b
+    norm_x = rand_x / (W - 1)
+    norm_y = rand_y / (H - 1)
+    norm_z = rand_z / (D - 1)
+
+    # 5. 应用 Scale Factor 并组合
+    r_vals /= scale_factor
+    g_vals /= scale_factor
+    b_vals /= scale_factor
+
+    # 堆叠成 [N, 6]
+    return np.stack([norm_x, norm_y, norm_z, r_vals, g_vals, b_vals], axis=1).astype(np.float32)
 
 def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0, save_exr: bool=False):
     os.makedirs(output_dir, exist_ok=True)
@@ -136,11 +181,21 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
                     output_min = min(output_min, r, g, b)
                     output_max = max(output_max, r, g, b)
                 # print(x, y, z, r, g, b)
-    output_dataset = np.array(output_dataset, dtype=np.float32)
+    grid_dataset = np.array(output_dataset, dtype=np.float32)
+    print(f"Grid samples shape: {grid_dataset.shape}")
+
+    # 2. 生成随机插值数据 (数量建议与网格点一致，或者更多)
+    num_random = grid_dataset.shape[0] * 16
+    random_dataset = generate_random_samples(output_volume, num_random, scale_factor)
+    
+    # 3. 合并与打乱
+    final_dataset = np.concatenate([grid_dataset, random_dataset], axis=0)
+    np.random.shuffle(final_dataset) # 这一步对训练非常关键
+
     print(f'min: {output_min}, max: {output_max}, scale_factor: {scale_factor}')
     saved_path = os.path.join(output_dir, 'train.npy')
-    np.save(saved_path, output_dataset)
-    print(f'Saved {saved_path}, Shape={output_dataset.shape}')
+    np.save(saved_path, final_dataset)
+    print(f'Saved {saved_path}, Shape={final_dataset.shape}')
 
     if save_exr:
         os.makedirs(os.path.join(output_dir, 'textures'), exist_ok=True)
