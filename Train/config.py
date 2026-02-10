@@ -30,11 +30,12 @@ class Config:
         self.input_dim = 3                    # XYZ coordinates
         self.hidden_dims = [64, 64, 64, 64, 64, 64]           # Hidden layer dimensions
         self.output_dim = 3                   # RGB labels
-        self.activation = nn.ReLU()           # Activation function
+        # self.activation = 'relu'           # Activation function
+        self.activation = 'siren'
         
         # ===================== Training Settings =====================
         self.batch_size = 512                 # Batch size
-        self.lr = 1e-3                        # Learning rate
+        self.lr = 1e-4                        # Learning rate
         self.epochs = 200                     # Number of training epochs
         # Device configuration (GPU/CPU)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
