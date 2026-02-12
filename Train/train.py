@@ -118,11 +118,3 @@ def main(config : Config):
     
     # Plot Final Loss Curve
     plot_loss(train_losses, config, config.epochs-1)
-
-if __name__ == "__main__":
-    current_dir = Path(__file__).resolve().parent
-    json_path = os.path.join(current_dir, 'data/VLM_ThirdPersonExampleMap.json')
-    config = Config(json_path)
-    main(config)
-    # Run evaluation after training
-    eval.main(config)

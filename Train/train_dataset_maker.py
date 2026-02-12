@@ -59,33 +59,74 @@ def generate_random_samples(volume, num_samples, scale_factor=1.0):
     print(f"Generating {num_samples} random interpolated samples...")
     D, H, W, C = volume.shape
 
-    # 1. 生成随机浮点坐标 (对应 Z, Y, X 轴的索引范围)
-    # 范围: [0, D-1], [0, H-1], [0, W-1]
     rand_z = np.random.rand(num_samples) * (D - 1)
     rand_y = np.random.rand(num_samples) * (H - 1)
     rand_x = np.random.rand(num_samples) * (W - 1)
 
-    # 2. 准备插值坐标 (3, N) -> map_coordinates 需要 (Dim0, Dim1, Dim2) 顺序
     coords = np.stack([rand_z, rand_y, rand_x])
 
-    # 3. 三线性插值 (Order=1)，边缘截断 (Mode='nearest' 对应 UE Clamp)
-    # 分别对 R, G, B 通道采样
     r_vals = map_coordinates(volume[..., 0], coords, order=1, mode='nearest')
     g_vals = map_coordinates(volume[..., 1], coords, order=1, mode='nearest')
     b_vals = map_coordinates(volume[..., 2], coords, order=1, mode='nearest')
 
-    # 4. 归一化坐标到 0~1 (作为神经网络输入)
-    # 注意输出顺序是: x, y, z, r, g, b
     norm_x = rand_x / (W - 1)
     norm_y = rand_y / (H - 1)
     norm_z = rand_z / (D - 1)
 
-    # 5. 应用 Scale Factor 并组合
     r_vals /= scale_factor
     g_vals /= scale_factor
     b_vals /= scale_factor
 
-    # 堆叠成 [N, 6]
+    return np.stack([norm_x, norm_y, norm_z, r_vals, g_vals, b_vals], axis=1).astype(np.float32)
+
+def generate_uniform_samples(volume, subdiv_factor, scale_factor=1.0):
+    """
+    基于 3D volume 生成【均匀细分】的连续坐标，并进行三线性插值采样。
+    
+    Args:
+        volume: shape (D, H, W, 3) 的 float32 数组
+        subdiv_factor: (int) 细分因子。例如 4 表示在每个轴上将分辨率提升 4 倍。
+                       总采样点数约为原始体素数的 (subdiv_factor^3) 倍。
+        scale_factor: 颜色缩放因子
+    Returns:
+        samples: shape (N, 6) 的数组，包含 [x, y, z, r, g, b]
+    """
+    D, H, W, C = volume.shape
+    
+    steps_z = int(D * subdiv_factor)
+    steps_y = int(H * subdiv_factor)
+    steps_x = int(W * subdiv_factor)
+    
+    total_points = steps_z * steps_y * steps_x
+    print(f"Generating uniform samples with subdivision={subdiv_factor}...")
+    print(f"  -> Original Vol: {D}x{H}x{W}")
+    print(f"  -> HighRes Vol:  {steps_z}x{steps_y}x{steps_x}")
+    print(f"  -> Total Samples: {total_points}")
+
+    z_space = np.linspace(0, D - 1, steps_z)
+    y_space = np.linspace(0, H - 1, steps_y)
+    x_space = np.linspace(0, W - 1, steps_x)
+
+    grid_z, grid_y, grid_x = np.meshgrid(z_space, y_space, x_space, indexing='ij')
+
+    flat_z = grid_z.flatten()
+    flat_y = grid_y.flatten()
+    flat_x = grid_x.flatten()
+    
+    coords = np.stack([flat_z, flat_y, flat_x])
+
+    r_vals = map_coordinates(volume[..., 0], coords, order=1, mode='nearest')
+    g_vals = map_coordinates(volume[..., 1], coords, order=1, mode='nearest')
+    b_vals = map_coordinates(volume[..., 2], coords, order=1, mode='nearest')
+
+    norm_x = flat_x / (W - 1)
+    norm_y = flat_y / (H - 1)
+    norm_z = flat_z / (D - 1)
+
+    r_vals /= scale_factor
+    g_vals /= scale_factor
+    b_vals /= scale_factor
+
     return np.stack([norm_x, norm_y, norm_z, r_vals, g_vals, b_vals], axis=1).astype(np.float32)
 
 def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0, save_exr: bool=False):
@@ -184,13 +225,11 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
     grid_dataset = np.array(output_dataset, dtype=np.float32)
     print(f"Grid samples shape: {grid_dataset.shape}")
 
-    # 2. 生成随机插值数据 (数量建议与网格点一致，或者更多)
-    num_random = grid_dataset.shape[0] * 16
-    random_dataset = generate_random_samples(output_volume, num_random, scale_factor)
+    # interpolate_dataset = generate_random_samples(output_volume, grid_dataset.shape[0] * 16, scale_factor)
+    interpolate_dataset = generate_uniform_samples(output_volume, 4, scale_factor)
     
-    # 3. 合并与打乱
-    final_dataset = np.concatenate([grid_dataset, random_dataset], axis=0)
-    np.random.shuffle(final_dataset) # 这一步对训练非常关键
+    final_dataset = np.concatenate([grid_dataset, interpolate_dataset], axis=0)
+    np.random.shuffle(final_dataset)
 
     print(f'min: {output_min}, max: {output_max}, scale_factor: {scale_factor}')
     saved_path = os.path.join(output_dir, 'train.npy')
@@ -205,9 +244,3 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
             path = os.path.join(output_dir, 'textures', filename)
             exr_util.write_exr(path, slice_data)
         print(f'Saved exr textures')
-
-if __name__ == '__main__':
-    current_dir = Path(__file__).resolve().parent
-    json_path = os.path.join(current_dir, 'data/VLM_ThirdPersonExampleMap.json')
-    output_dir = os.path.join(current_dir, 'data')
-    make_train_dataset(json_path, output_dir, scale_factor=1.0, save_exr=True)

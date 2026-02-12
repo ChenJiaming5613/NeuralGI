@@ -63,13 +63,3 @@ def save_model(config: Config, saving_path: str):
     
     print(f"Head (first 5): {flat_data[:5]}")
     print(f"Tail (last 5): {flat_data[-5:]}")
-
-if __name__ == "__main__":
-    current_dir = Path(__file__).resolve().parent    
-    json_path = os.path.join(current_dir, 'data/VLM_ThirdPersonExampleMap.json') 
-    if not os.path.exists(json_path):
-        print(f"Error: Config file not found at {json_path}")
-    else:
-        config = Config(json_path)
-        output_file = os.path.join(config.save_dir, "model.bin")
-        save_model(config, output_file)

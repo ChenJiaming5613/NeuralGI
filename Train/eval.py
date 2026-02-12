@@ -126,9 +126,3 @@ def main(config):
     evaluate_model(config)
     
     print("\nEvaluation Complete!")
-
-if __name__ == "__main__":
-    current_dir = Path(__file__).resolve().parent
-    json_path = os.path.join(current_dir, 'data/VLM_ThirdPersonExampleMap.json')
-    config = Config(json_path)
-    main(config)
