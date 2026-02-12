@@ -9,7 +9,6 @@ import exr_compare
 import save_model
 
 def run_level(level_name: str):
-    level_name = 'Room'
     current_dir = Path(__file__).resolve().parent
     json_path = os.path.join(current_dir, f'data/VLM_{level_name}.json')
     if not os.path.exists(json_path):
