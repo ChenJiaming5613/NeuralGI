@@ -1,12 +1,12 @@
 import os
-from pathlib import Path
 import torch
 import numpy as np
+from loguru import logger
 from config import Config
 from model import VoxelMLP
 
 def save_model(config: Config, saving_path: str):
-    print(f"\nLoading model: {config.model_path}")
+    logger.info(f"Loading model: {config.model_path}")
     model = VoxelMLP(config).to('cpu')
 
     # Load Weights
@@ -18,15 +18,15 @@ def save_model(config: Config, saving_path: str):
             state_dict = checkpoint
             
         model.load_state_dict(state_dict)
-        print("Model weights loaded successfully!")
+        logger.info("Model weights loaded successfully!")
     except Exception as e:
-        print(f"Failed to load model! Error: {e}")
+        logger.error(f"Failed to load model! Error: {e}")
         return
 
     all_params = []
     layer_count = 0
 
-    print("\n--- Exporting Layers ---")
+    logger.info("--- Exporting Layers ---")
     for i, layer in enumerate(model.model):
         if hasattr(layer, 'linear'):
             w = layer.linear.weight.detach().cpu().numpy().astype(np.float32)
@@ -36,17 +36,17 @@ def save_model(config: Config, saving_path: str):
             else:
                 b = np.zeros(w.shape[0], dtype=np.float32)
 
-            print(f"Layer {i}: Weight {w.shape} | Bias {b.shape}")
+            logger.info(f"Layer {i}: Weight {w.shape} | Bias {b.shape}")
             
             all_params.append(w.flatten())
             all_params.append(b.flatten())
             
             layer_count += 1
         else:
-            print(f"Warning: Layer {i} does not have a 'linear' attribute, skipping.")
+            logger.info(f"Warning: Layer {i} does not have a 'linear' attribute, skipping.")
 
     if layer_count == 0:
-        print("Error: No layers were exported! Check your model structure.")
+        logger.info("Error: No layers were exported! Check your model structure.")
         return
 
     flat_data = np.concatenate(all_params)
@@ -55,11 +55,11 @@ def save_model(config: Config, saving_path: str):
     
     flat_data.tofile(saving_path)
 
-    print(f"\n--- Success ---")
-    print(f"Saved to: {saving_path}")
-    print(f"Total layers exported: {layer_count}")
-    print(f"Total float count: {len(flat_data)}")
-    print(f"File size: {len(flat_data) * 4 / 1024:.2f} KB")
+    logger.info(f"--- Success ---")
+    logger.info(f"Saved to: {saving_path}")
+    logger.info(f"Total layers exported: {layer_count}")
+    logger.info(f"Total float count: {len(flat_data)}")
+    logger.info(f"File size: {len(flat_data) * 4 / 1024:.2f} KB")
     
-    print(f"Head (first 5): {flat_data[:5]}")
-    print(f"Tail (last 5): {flat_data[-5:]}")
+    logger.info(f"Head (first 5): {flat_data[:5]}")
+    logger.info(f"Tail (last 5): {flat_data[-5:]}")

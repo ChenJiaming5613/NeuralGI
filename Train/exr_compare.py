@@ -99,7 +99,8 @@ class EXRViewer:
         self.update_plot()
 
 if __name__ == "__main__":
+    level_name = 'ThirdPersonExampleMap'
     current_dir = Path(__file__).resolve().parent
-    folder_A = os.path.join(current_dir, 'data/textures')
-    folder_B = os.path.join(current_dir, 'model_checkpoints/eval')
-    viewer = EXRViewer(folder_A, folder_B, max_idx=31)
+    folder_A = os.path.join(current_dir, f'data/{level_name}/textures')
+    folder_B = os.path.join(current_dir, f'data/{level_name}/model_checkpoints/eval')
+    viewer = EXRViewer(folder_A, folder_B, max_idx=39)

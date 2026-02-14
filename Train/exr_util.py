@@ -2,6 +2,7 @@ import os
 import numpy as np
 import OpenEXR
 import Imath
+from loguru import logger
 
 def load_image(path):
     if not os.path.exists(path):
@@ -21,7 +22,7 @@ def load_image(path):
         return img
 
     except Exception as e:
-        print(f"Failed to read exr file: {e}")
+        logger.error(f"Failed to read exr file: {e}")
         return None
 
 def write_exr(path, data, dtype=np.float32):

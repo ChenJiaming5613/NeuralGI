@@ -1,9 +1,9 @@
 import os
 import json
 import struct
-from pathlib import Path
 import numpy as np
 from scipy.ndimage import map_coordinates
+from loguru import logger
 import exr_util
 
 def decode_r11g11b10f(b0, b1, b2, b3):
@@ -56,7 +56,7 @@ def generate_random_samples(volume, num_samples, scale_factor=1.0):
     Returns:
         samples: shape (num_samples, 6) 的数组，包含 [x, y, z, r, g, b]
     """
-    print(f"Generating {num_samples} random interpolated samples...")
+    logger.info(f"Generating {num_samples} random interpolated samples...")
     D, H, W, C = volume.shape
 
     rand_z = np.random.rand(num_samples) * (D - 1)
@@ -98,10 +98,10 @@ def generate_uniform_samples(volume, subdiv_factor, scale_factor=1.0):
     steps_x = int(W * subdiv_factor)
     
     total_points = steps_z * steps_y * steps_x
-    print(f"Generating uniform samples with subdivision={subdiv_factor}...")
-    print(f"  -> Original Vol: {D}x{H}x{W}")
-    print(f"  -> HighRes Vol:  {steps_z}x{steps_y}x{steps_x}")
-    print(f"  -> Total Samples: {total_points}")
+    logger.info(f"Generating uniform samples with subdivision={subdiv_factor}...")
+    logger.info(f"  -> Original Vol: {D}x{H}x{W}")
+    logger.info(f"  -> HighRes Vol:  {steps_z}x{steps_y}x{steps_x}")
+    logger.info(f"  -> Total Samples: {total_points}")
 
     z_space = np.linspace(0, D - 1, steps_z)
     y_space = np.linspace(0, H - 1, steps_y)
@@ -132,12 +132,12 @@ def generate_uniform_samples(volume, subdiv_factor, scale_factor=1.0):
 def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0, save_exr: bool=False):
     os.makedirs(output_dir, exist_ok=True)
     
-    print(f'Loading JSON: {json_path}')
+    logger.info(f'Loading JSON: {json_path}')
     try:
         with open(json_path, 'r') as f:
             data = json.load(f)
     except FileNotFoundError:
-        print(f'JSON file not found: {json_path}')
+        logger.error(f'JSON file not found: {json_path}')
         return
     
     # parse indirection data
@@ -154,7 +154,7 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
         indirection.append([chunk[0], chunk[1], chunk[2]])
     indirection = np.array(indirection, dtype=np.int32).reshape((
         indirection_data_dim['z'], indirection_data_dim['y'], indirection_data_dim['x'], 3))
-    print(indirection.shape)
+    logger.info(f'Indirection Texture Shape: {indirection.shape}')
     
     # parse ambient data
     ambient_data = data['ambientVectorData']
@@ -174,7 +174,7 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
         
     pixels_float = np.array(pixels_list, dtype=np.float32)
     volume = pixels_float.reshape((depth, height, width, 3))
-    print(volume.shape)
+    logger.info(f'Volume Shape: {volume.shape}')
 
     brick_size = data['brickSize']
     padded_brick_size = brick_size + 1
@@ -182,12 +182,12 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
         indirection.shape[0] * padded_brick_size,
         indirection.shape[1] * padded_brick_size,
         indirection.shape[2] * padded_brick_size, 3), dtype=np.float32)
-    print(output_volume.shape)
+    logger.info(f'Output Volume Shape: {output_volume.shape}')
 
     for z in range(indirection.shape[0]):
         for y in range(indirection.shape[1]):
             for x in range(indirection.shape[2]):
-                # print((z, y, x), indirection[z, y, x])
+                # logger.info((z, y, x), indirection[z, y, x])
                 phy_x, phy_y, phy_z = indirection[z, y, x]
                 src_range = np.array([phy_z, phy_y, phy_x]) * padded_brick_size
                 dst_range = np.array([z, y, x]) * padded_brick_size
@@ -200,7 +200,7 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
                     src_range[1] : src_range[1] + padded_brick_size,
                     src_range[2] : src_range[2] + padded_brick_size
                 ]
-                # print(dst_range, dst_range + padded_brick_size, '<-', src_range, src_range + padded_brick_size)
+                # logger.info(dst_range, dst_range + padded_brick_size, '<-', src_range, src_range + padded_brick_size)
     
     output_dataset = []
     output_min = None
@@ -221,20 +221,20 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
                 else:
                     output_min = min(output_min, r, g, b)
                     output_max = max(output_max, r, g, b)
-                # print(x, y, z, r, g, b)
+                # logger.info(x, y, z, r, g, b)
     grid_dataset = np.array(output_dataset, dtype=np.float32)
-    print(f"Grid samples shape: {grid_dataset.shape}")
+    logger.info(f"Grid samples shape: {grid_dataset.shape}")
 
     # interpolate_dataset = generate_random_samples(output_volume, grid_dataset.shape[0] * 16, scale_factor)
-    interpolate_dataset = generate_uniform_samples(output_volume, 4, scale_factor)
-    
-    final_dataset = np.concatenate([grid_dataset, interpolate_dataset], axis=0)
+    # interpolate_dataset = generate_uniform_samples(output_volume, 4, scale_factor)
+    # final_dataset = np.concatenate([grid_dataset, interpolate_dataset], axis=0)
+    final_dataset = grid_dataset
     np.random.shuffle(final_dataset)
 
-    print(f'min: {output_min}, max: {output_max}, scale_factor: {scale_factor}')
+    logger.info(f'Volume Range, min: {output_min}, max: {output_max}, scale_factor: {scale_factor}')
     saved_path = os.path.join(output_dir, 'train.npy')
     np.save(saved_path, final_dataset)
-    print(f'Saved {saved_path}, Shape={final_dataset.shape}')
+    logger.info(f'Saved {saved_path}, Shape={final_dataset.shape}')
 
     if save_exr:
         os.makedirs(os.path.join(output_dir, 'textures'), exist_ok=True)
@@ -243,4 +243,4 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
             filename = f'ambient_slice_{z}.exr'
             path = os.path.join(output_dir, 'textures', filename)
             exr_util.write_exr(path, slice_data)
-        print(f'Saved exr textures')
+            logger.info(f'Saved exr: {path}')

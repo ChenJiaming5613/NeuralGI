@@ -1,20 +1,22 @@
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
+from loguru import logger
 
 def load_and_preprocess_data(config):
     # Load data
-    print(f"Loading data: {config.data_path}")
+    logger.info(f"Loading data: {config.data_path}")
     if not hasattr(config, "data_path"):
+        logger.error(f"Config missing data_path")
         raise ValueError("Config missing data_path")
         
     try:
         data = np.load(config.data_path).astype(np.float32)
     except FileNotFoundError:
-        print(f"Data file not found: {config.data_path}")
+        logger.error(f"Data file not found: {config.data_path}")
         return None, None, 0
 
-    print(f"Original data shape: {data.shape} (Samples x 6)")
+    logger.info(f"Original data shape: {data.shape} (Samples x 6)")
     
     # Split inputs and labels
     inputs = data[:, :3]   # First 3 columns: XYZ coordinates
@@ -44,10 +46,10 @@ def load_and_preprocess_data(config):
         num_workers=0
     )
     
-    print(f"Data preprocessing complete:")
-    print(f"   Total samples: {total_samples}")
-    print(f"   Input range: [{inputs.min():.4f}, {inputs.max():.4f}]")
-    print(f"   Label range: [{labels.min():.4f}, {labels.max():.4f}]")
+    logger.info(f"Data preprocessing complete:")
+    logger.info(f"   Total samples: {total_samples}")
+    logger.info(f"   Input range: [{inputs.min():.4f}, {inputs.max():.4f}]")
+    logger.info(f"   Label range: [{labels.min():.4f}, {labels.max():.4f}]")
     
     # Return train_loader (shuffled) and eval_loader (not shuffled)
     return train_loader, eval_loader, total_samples

@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from loguru import logger
 from config import Config
 from model import VoxelMLP
 from dataset import load_and_preprocess_data
@@ -37,6 +38,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, config, epoch):
 
 # ===================== Visualization =====================
 def plot_loss(train_losses, config, epoch):
+    # logger.info(f"train losses: {train_losses}")
     """Plot Training Loss Curve."""
     plt.figure(figsize=(10, 6))
     plt.plot(train_losses, label="Train Loss", color="blue")
@@ -49,14 +51,14 @@ def plot_loss(train_losses, config, epoch):
     save_path = os.path.join(config.save_dir, f"loss_curve_epoch_{epoch+1}.png")
     plt.savefig(save_path)
     plt.close()
-    print(f"Loss curve saved: {save_path}")
+    logger.info(f"Loss curve saved: {save_path}")
 
 # ===================== Main Training Flow =====================
 def main(config : Config):
-    print(f"Training Config:")
-    print(f"   Device: {config.device}")
-    print(f"   Model Arch: {config.input_dim} -> {config.hidden_dims} -> {config.output_dim}")
-    print(f"   Epochs: {config.epochs} | Batch Size: {config.batch_size} | LR: {config.lr}")
+    logger.info(f"Training Config:")
+    logger.info(f"   Device: {config.device}")
+    logger.info(f"   Model Arch: {config.input_dim} -> {config.hidden_dims} -> {config.output_dim}")
+    logger.info(f"   Epochs: {config.epochs} | Batch Size: {config.batch_size} | LR: {config.lr}")
     
     # Create model save directory
     os.makedirs(config.save_dir, exist_ok=True)
@@ -80,7 +82,7 @@ def main(config : Config):
     train_losses = []
     
     # Start Training
-    print("\nStarting Training on FULL Dataset...")
+    logger.info("Starting Training on FULL Dataset...")
     for epoch in range(config.epochs):
         # Train
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, config, epoch)
@@ -92,9 +94,9 @@ def main(config : Config):
         scheduler.step()
         
         # Log Progress
-        # print(f"\nEpoch {epoch+1}/{config.epochs} | "
-        #       f"Train Loss: {train_loss:.6f} | "
-        #       f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+        logger.info(f"Epoch {epoch+1}/{config.epochs} | "
+              f"Train Loss: {train_loss:.6f} | "
+              f"LR: {optimizer.param_groups[0]['lr']:.6f}")
         
         # Save Model
         if (epoch + 1) % config.save_freq == 0:
@@ -105,7 +107,7 @@ def main(config : Config):
                 "optimizer_state_dict": optimizer.state_dict(),
                 "train_loss": train_loss,
             }, model_path)
-            print(f"Model saved: {model_path}")
+            logger.info(f"Model saved: {model_path}")
         
         # Plot Loss
         if (epoch + 1) % config.plot_freq == 0:
@@ -114,7 +116,7 @@ def main(config : Config):
     # Training Complete: Save Final Model
     final_model_path = os.path.join(config.save_dir, "mlp_final.pth")
     torch.save(model.state_dict(), final_model_path)
-    print(f"\nTraining Complete! Final model saved to: {final_model_path}")
+    logger.info(f"Training Complete! Final model saved to: {final_model_path}")
     
     # Plot Final Loss Curve
     plot_loss(train_losses, config, config.epochs-1)

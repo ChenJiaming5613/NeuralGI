@@ -1,10 +1,9 @@
 import os
-from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from config import Config
+from loguru import logger
 from model import VoxelMLP
 from dataset import load_and_preprocess_data
 import exr_util
@@ -18,7 +17,7 @@ def evaluate_model(config):
     4. Calculate average pixel loss per sample
     """
     # Step 1: Load Model
-    print(f"\nLoading model: {config.model_path}")
+    logger.info(f"Loading model: {config.model_path}")
     model = VoxelMLP(config).to(config.device)
     
     # Load Weights
@@ -28,9 +27,9 @@ def evaluate_model(config):
             model.load_state_dict(checkpoint["model_state_dict"])
         else:
             model.load_state_dict(checkpoint)
-        print("Model weights loaded successfully!")
+        logger.info("Model weights loaded successfully!")
     except Exception as e:
-        print(f"Failed to load model! Error: {e}")
+        logger.error(f"Failed to load model! Error: {e}")
         return
     
     # Step 2: Set to Evaluation Mode
@@ -51,10 +50,10 @@ def evaluate_model(config):
          dataloader = config.dataloader
 
     if dataloader is None:
-        print("No data to evaluate.")
+        logger.warning("No data to evaluate.")
         return
 
-    print(f"\nStarting Inference Evaluation (Device: {config.device})...")
+    logger.info(f"Starting Inference Evaluation (Device: {config.device})...")
     
     # Step 4: Batch Inference + Loss Calculation
     with torch.no_grad():
@@ -76,14 +75,14 @@ def evaluate_model(config):
     
     # Step 5: Calculate Average Loss
     avg_sample_l2_loss = total_l2_loss / config.total_samples
-    print(f"\nEvaluation Results:")
-    print(f"   Total Cumulative L2 Loss: {total_l2_loss:.4f}")
-    print(f"   Total Samples: {config.total_samples}")
-    print(f"   Avg Pixel L2 Loss per Sample: {avg_sample_l2_loss:.4f}")
+    logger.info(f"Evaluation Results:")
+    logger.info(f"   Total Cumulative L2 Loss: {total_l2_loss:.4f}")
+    logger.info(f"   Total Samples: {config.total_samples}")
+    logger.info(f"   Avg Pixel L2 Loss per Sample: {avg_sample_l2_loss:.4f}")
     
     # Calculate RMSE
     avg_sample_rmse = np.sqrt(avg_sample_l2_loss)
-    print(f"   Avg Pixel RMSE per Sample: {avg_sample_rmse:.4f}")
+    logger.info(f"   Avg Pixel RMSE per Sample: {avg_sample_rmse:.4f}")
 
     volume_dim_x, volume_dim_y, volume_dim_z  = config.volume_dim
     pred_data = torch.zeros((volume_dim_z, volume_dim_y, volume_dim_x, 3), dtype=torch.float32)
@@ -99,22 +98,22 @@ def evaluate_model(config):
                         rgb = model(input)
                         pred_data[z, y, x] = rgb
                         pbar.update(1)
-                        # print(rgb)
+                        # logger.info(rgb)
                         # return
-    print('Generate Done')
+    logger.info('Generate Done')
     os.makedirs(os.path.join(config.save_dir, 'eval'), exist_ok=True)
     for z in range(pred_data.shape[0]):
         slice_data = pred_data[z].detach().cpu().numpy() # (Height, Width, 3)
         filename = f'pred_ambient_slice_{z}.exr'
         path = os.path.join(config.save_dir, 'eval', filename)
         exr_util.write_exr(path, slice_data)
-    print(f'Saved exr textures')
+        logger.info(f'Saved exr: {path}')
 
 def main(config):
-    print("======= Voxel MLP Model Evaluation Script =======")
-    print(f"Eval Config:")
-    print(f"   Device: {config.device}")
-    print(f"   Batch Size: {config.batch_size}")
+    logger.info("======= Voxel MLP Model Evaluation Script =======")
+    logger.info(f"Eval Config:")
+    logger.info(f"   Device: {config.device}")
+    logger.info(f"   Batch Size: {config.batch_size}")
     
     # Load Data (Use Full Dataset)
     # The load_and_preprocess_data function now returns the eval_loader as the second argument
@@ -125,4 +124,4 @@ def main(config):
     # Execute Evaluation
     evaluate_model(config)
     
-    print("\nEvaluation Complete!")
+    logger.info("Evaluation Complete!")
