@@ -14,12 +14,12 @@ class Config:
         
         self.level_name = level_name
         brick_size = data['brickSize']
-        padded_brick_size = brick_size + 1
+        # padded_brick_size = brick_size + 1
         indirection_data_dim = data['indirectionTextureDimensions']
         self.volume_dim = [
-            indirection_data_dim['x'] * padded_brick_size,
-            indirection_data_dim['y'] * padded_brick_size,
-            indirection_data_dim['z'] * padded_brick_size
+            indirection_data_dim['x'] * brick_size,
+            indirection_data_dim['y'] * brick_size,
+            indirection_data_dim['z'] * brick_size
         ]
 
         current_dir = Path(__file__).resolve().parent

@@ -103,4 +103,4 @@ if __name__ == "__main__":
     current_dir = Path(__file__).resolve().parent
     folder_A = os.path.join(current_dir, f'data/{level_name}/textures')
     folder_B = os.path.join(current_dir, f'data/{level_name}/model_checkpoints/eval')
-    viewer = EXRViewer(folder_A, folder_B, max_idx=39)
+    viewer = EXRViewer(folder_A, folder_B, max_idx=31)
