@@ -46,8 +46,9 @@ def run_level(level_name: str):
 if __name__ == '__main__':
     level_names = [
         'ThirdPersonExampleMap',
-        'Room',
-        'Sponza',
+        'ThirdPersonExampleMap2',
+        # 'Room',
+        # 'Sponza', 
     ]
 
     for level_name in level_names:

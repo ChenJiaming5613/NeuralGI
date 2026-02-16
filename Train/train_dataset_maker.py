@@ -129,6 +129,67 @@ def generate_uniform_samples(volume, subdiv_factor, scale_factor=1.0):
 
     return np.stack([norm_x, norm_y, norm_z, r_vals, g_vals, b_vals], axis=1).astype(np.float32)
 
+def remove_volume_padding(volume_padded, padded_brick_size=5, clean_brick_size=4):
+    """
+    将带有 Padding 的 Volume (e.g. 40x40x40) 转换为无 Padding 的连续 Volume (e.g. 32x32x32)。
+    
+    Args:
+        volume_padded: shape (D_pad, H_pad, W_pad, C), 例如 (40, 40, 40, 3)
+        padded_brick_size: 含 padding 的 brick 大小，默认 5
+        clean_brick_size: 有效数据的 brick 大小，默认 4
+        
+    Returns:
+        volume_clean: shape (D_clean, H_clean, W_clean, C), 例如 (32, 32, 32, 3)
+    """
+    D, H, W, C = volume_padded.shape
+    
+    # 1. 验证尺寸是否合法
+    if D % padded_brick_size != 0 or H % padded_brick_size != 0 or W % padded_brick_size != 0:
+        logger.error(f"Input volume shape {volume_padded.shape} is not divisible by padded_brick_size {padded_brick_size}!")
+        return None
+
+    # 计算 Grid 的数量 (例如 40 / 5 = 8)
+    grid_d = D // padded_brick_size
+    grid_h = H // padded_brick_size
+    grid_w = W // padded_brick_size
+    
+    logger.info(f"Stripping Padding: Input {volume_padded.shape} -> Grid ({grid_d}x{grid_h}x{grid_w}) bricks")
+
+    # 2. 维度重塑 (Reshape)
+    # 将 (40, 40, 40, 3) 变成 (8, 5, 8, 5, 8, 5, 3)
+    # 这里的顺序必须是：Grid维度, Brick维度...
+    reshaped = volume_padded.reshape(
+        grid_d, padded_brick_size,
+        grid_h, padded_brick_size,
+        grid_w, padded_brick_size,
+        C
+    )
+
+    # 3. 切片 (Slicing) - 丢弃 Padding
+    # 在每个 Brick 维度的 5 个元素中，只取前 4 个 (:clean_brick_size)
+    # 也就是丢弃 index 4
+    # 形状变为 (8, 4, 8, 4, 8, 4, 3)
+    sliced = reshaped[
+        :, :clean_brick_size, 
+        :, :clean_brick_size, 
+        :, :clean_brick_size, 
+        :
+    ]
+
+    # 4. 再次重塑 (Merge back)
+    # 将 (8, 4) 合并回 (32)
+    final_shape = (
+        grid_d * clean_brick_size,
+        grid_h * clean_brick_size,
+        grid_w * clean_brick_size,
+        C
+    )
+    
+    volume_clean = sliced.reshape(final_shape)
+    
+    logger.success(f"Padding Removed: {volume_padded.shape} -> {volume_clean.shape}")
+    return volume_clean
+
 def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0, save_exr: bool=False):
     os.makedirs(output_dir, exist_ok=True)
     
@@ -201,7 +262,7 @@ def make_train_dataset(json_path: str, output_dir: str, scale_factor: float=1.0,
                     src_range[2] : src_range[2] + padded_brick_size
                 ]
                 # logger.info(dst_range, dst_range + padded_brick_size, '<-', src_range, src_range + padded_brick_size)
-    
+    output_volume = remove_volume_padding(output_volume, padded_brick_size, brick_size)    
     output_dataset = []
     output_min = None
     output_max = None
